@@ -1,4 +1,4 @@
-import { getServerSession } from "next-auth";
+import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]/options";
 import UserModel from "@/model/User";
 import dbConnect from "@/lib/dbConnect";
@@ -7,13 +7,16 @@ import mongoose from "mongoose";
 
 export async function GET(request: Request) {
   await dbConnect();
-
+  console.log("get messages route mein huin");
   // Get the current session (authenticated user)
   const session = await getServerSession(authOptions);
-  const user: User = session?.user;
-
+  const user: User = session?.user as User;
+  console.log("inside get message route user:", user);
+  console.log("session from the get messages api", session);
+  //todo: remove in production
+  console.log("user from the get-messages api", user);
   // Check if the user is authenticated
-  if (!session || !session.user) {
+  if (!session || !user) {
     return Response.json(
       {
         success: false,
@@ -24,20 +27,35 @@ export async function GET(request: Request) {
   }
 
   const userId = new mongoose.Types.ObjectId(user._id);
+  const email = user?.email;
+  //todo remove
+  console.log("UserId from the get messages route", userId, email);
   try {
+    console.log("userId", userId);
+    // const user = await UserModel.aggregate([
+    //   { $match: { email: email } },
+    //   { $unwind: "$messages" },
+    //   { $sort: { "messages.createdAt": -1 } },
+    //   { $group: { _id: "$_id", messages: { $push: "$messages" } } },
+    // ]).exec();
     const user = await UserModel.aggregate([
-      { $match: { id: userId } },
-      { $unwind: "messages" },
-      { $sort: { "messages.createdAt": -1 } },
-      { $group: { _id: "$_id", messages: { $push: "$messages" } } },
-    ]);
+      { $match: { email: email } }, // Match user by email
+      {
+        $project: {
+          messages: { $reverseArray: { $sortArray: { input: "$messages", sortBy: { createdAt: -1 } } } },
+        },
+      },
+    ]).exec();
+    
+
+    console.log("User from the get message try catch block", user);
     if (!user || user.length === 0) {
       return Response.json(
         {
           success: false,
-          message: "User not found!",
+          message: "User not found!@!",
         },
-        { status: 401 }
+        { status: 404 }
       );
     }
     return Response.json(
